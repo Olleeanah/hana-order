@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>花田舍 點單結帳系統</title>
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 React 與 ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <!-- 載入 Babel 用來轉譯 JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-50">
+  <div id="root"></div>
+  <script type="text/babel">
+    // 簡易封裝常用元件：Card、CardContent、Button、Input
+    const Card = ({ children, className = "" }) => (
+      <div className={`border rounded shadow-sm p-2 ${className}`}>
+        {children}
+      </div>
+    );
+
+    const CardContent = ({ children, className = "" }) => (
+      <div className={className}>
+        {children}
+      </div>
+    );
+
+    const Button = ({ children, onClick, variant, size, className = "", ...rest }) => {
+      let baseClass = "px-3 py-1 rounded cursor-pointer inline-block";
+      if (variant === "outline") {
+        baseClass += " border";
+      } else if (variant === "destructive") {
+        baseClass += " bg-red-500 text-white";
+      } else {
+        baseClass += " bg-blue-500 text-white";
+      }
+      if (size === "sm") {
+        baseClass += " text-sm";
+      }
+      return (
+        <button onClick={onClick} className={`${baseClass} ${className}`} {...rest}>
+          {children}
+        </button>
+      );
+    };
+
+    const Input = (props) => (
+      <input className="border rounded px-2 py-1" {...props} />
+    );
+
+    // 菜單品項資料
+    const menu = [
+      { name: "經典蛋燒", price: 33, cost: 6.5, short: "蛋" },
+      { name: "起司蛋燒", price: 40, cost: 12.8, short: "起" },
+      { name: "雙重起司", price: 30, cost: 9.25, short: "雙" },
+      { name: "濃郁卡士達", price: 25, cost: 7.63, short: "卡" },
+      { name: "法式奶酥", price: 35, cost: 10.25, short: "奶" },
+      { name: "起司奶酥", price: 35, cost: 9.12, short: "酥" },
+      { name: "黑糖麻糬", price: 33, cost: 9.82, short: "黑" },
+      { name: "日式紅豆泥", price: 30, cost: 6.03, short: "紅" },
+      { name: "日式紅豆麻糬", price: 35, cost: 8.22, short: "糬" },
+      { name: "古早味雞蛋糕", price: 18, cost: 3, short: "古" },
+    ];
+
+    // 訂單狀態與標籤
+    const STATUS_OPTIONS = ["queue", "cooking", "ready", "done"];
+    const STATUS_LABELS = {
+      queue: "🧾 排隊中",
+      cooking: "🍳 製作中",
+      ready: "📦 等待取餐",
+      done: "✅ 已取餐",
+    };
+
+    function OrderSystem() {
+      const { useState, useEffect } = React;
+      // 狀態宣告
+      const [orderId, setOrderId] = useState(1);
+      const [order, setOrder] = useState({});
+      const [payment, setPayment] = useState(0);
+      const [pickupTime, setPickupTime] = useState("");
+      const [orderHistory, setOrderHistory] = useState([]);
+      // 預設狀態為「列表」模式，可從此畫面新增訂單
+      const [viewingOrderId, setViewingOrderId] = useState("list");
+      const [showDone, setShowDone] = useState(false);
+      const [viewingMonthly, setViewingMonthly] = useState(false);
+      const [selectedDate, setSelectedDate] = useState(null);
+      const [note, setNote] = useState("");
+
+      // 取得今天的日期字串作為 key (格式如 2025-04-10)
+      const getTodayKey = () => {
+        return new Date().toLocaleDateString("zh-TW", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit"
+        }).replaceAll("/", "-");
+      };
+
+      // 當 selectedDate 改變時，從 localStorage 讀取該日期的訂單
+      useEffect(() => {
+        if (selectedDate) {
+          const data = JSON.parse(localStorage.getItem("orderData") || "{}");
+          setOrderHistory(data[selectedDate] || []);
+        }
+      }, [selectedDate]);
+
+      // 儲存訂單資料到 localStorage
+      const handleSaveOrder = () => {
+        if (Object.keys(order).length === 0) {
+          alert("目前尚未選擇任何品項，無法儲存訂單！");
+          return;
+        }
+        const total = Object.entries(order).reduce((sum, [name, qty]) => {
+          const item = menu.find((m) => m.name === name);
+          return sum + qty * item.price;
+        }, 0);
+
+        setOrderHistory((prev) => {
+          const updated = [...prev];
+          const index = updated.findIndex((o) => o.orderId === orderId);
+          const paid = payment >= total;
+          const oldStatus = index !== -1 ? updated[index].status : "queue";
+          const record = {
+            orderId,
+            order,
+            payment,
+            pickupTime,
+            total,
+            paid,
+            status: oldStatus,
+            note,
+          };
+          if (index !== -1) {
+            updated[index] = record;
+          } else {
+            updated.push(record);
+          }
+
+          // 將資料存入 localStorage
+          const today = getTodayKey();
+          const monthly = JSON.parse(localStorage.getItem("orderData") || "{}");
+          monthly[today] = updated;
+          localStorage.setItem("orderData", JSON.stringify(monthly));
+
+          return updated;
+        });
+        // 儲存後回到列表畫面
+        setViewingOrderId("list");
+      };
+
+      // 進入編輯某筆訂單
+      const handleViewOrder = (id) => {
+        const found = orderHistory.find((o) => o.orderId === id);
+        if (found) {
+          setOrderId(found.orderId);
+          setOrder(found.order);
+          setPayment(found.payment);
+          setPickupTime(found.pickupTime || "");
+          setViewingOrderId(null); // 編輯模式為 null
+          setNote(found.note || "");
+        }
+      };
+
+      // 刪除訂單
+      const handleCancelOrder = (id) => {
+        const today = selectedDate || getTodayKey();
+        const monthly = JSON.parse(localStorage.getItem("orderData") || "{}");
+        const updated = (monthly[today] || []).filter((o) => o.orderId !== id);
+        monthly[today] = updated;
+        localStorage.setItem("orderData", JSON.stringify(monthly));
+        setOrderHistory(updated);
+      };
+
+      // 切換到選取日期的訂單紀錄畫面
+      const handleSelectDate = (date) => {
+        setSelectedDate(date);
+        setViewingMonthly(false);
+        setViewingOrderId("list");
+      };
+
+      // 渲染本月營業紀錄
+      const renderMonthlyList = () => {
+        const data = JSON.parse(localStorage.getItem("orderData") || "{}");
+        const dates = Object.keys(data);
+        const getDailyTotal = (orders) => orders.reduce((sum, o) => sum + (o.total || 0), 0);
+
+        return (
+          <div className="p-4 bg-white rounded-xl border space-y-2">
+            <h2 className="text-lg font-semibold">📅 本月營業紀錄</h2>
+            {dates.length === 0 && <p className="text-sm text-gray-500">尚無資料</p>}
+            <ul className="space-y-1">
+              {dates.map((date) => (
+                <li key={date} className="flex justify-between items-center border p-2 rounded">
+                  <span>{date}｜💰${getDailyTotal(data[date])}</span>
+                  <div className="space-x-2">
+                    <Button size="sm" onClick={() => handleSelectDate(date)}>查看</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      type="button"
+                      onClick={() => {
+                        const orders = data[date];
+                        if (!orders || orders.length === 0) {
+                          alert("這天沒有訂單，無法匯出！");
+                          return;
+                        }
+                        try {
+                          const json = JSON.stringify(orders, null, 2);
+                          const blob = new Blob([json], { type: "application/json" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${date}-orders.json`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        } catch (e) {
+                          alert("⚠️ 匯出失敗，請確認瀏覽器允許下載。\n錯誤內容：" + e.message);
+                        }
+                      }}
+                    >
+                      匯出
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        const confirmed = window.confirm(`確定要刪除 ${date} 的所有訂單嗎？`);
+                        if (!confirmed) return;
+                        const monthly = JSON.parse(localStorage.getItem("orderData") || "{}");
+                        delete monthly[date];
+                        localStorage.setItem("orderData", JSON.stringify(monthly));
+                        setSelectedDate(null);
+                        setOrderHistory([]);
+                        setViewingMonthly(false);
+                      }}
+                    >
+                      刪除
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" className="mt-2" onClick={() => setViewingMonthly(false)}>🔙 返回</Button>
+          </div>
+        );
+      };
+
+      // 渲染當日點單列表畫面，並加入「新增訂單」按鈕；同時對已取餐 (done) 狀態實作折疊/展開功能
+      const renderOrderList = () => {
+        const totalStats = {};
+        let totalRevenue = 0;
+        orderHistory.forEach((o) => {
+          totalRevenue += o.total || 0;
+          Object.entries(o.order).forEach(([name, qty]) => {
+            totalStats[name] = (totalStats[name] || 0) + qty;
+          });
+        });
+
+        return (
+          <div className="p-4 bg-white rounded-xl border space-y-2 relative pb-20">
+            <h2 className="text-lg font-semibold">
+              📋 當日點單記錄（{selectedDate || getTodayKey()}）
+            </h2>
+            {STATUS_OPTIONS.map((status) => {
+              // 針對每一個狀態過濾相對應的訂單資料
+              const filtered = orderHistory
+                .filter((o) => o.status === status)
+                .slice()
+                .reverse();
+
+              // 針對已取餐狀態 (done) 進行折疊/展開控制
+              if (status === "done") {
+                return (
+                  <div key={status} className="mt-4">
+                    <h3
+                      className="font-semibold bg-green-100 px-2 py-1 rounded cursor-pointer inline-block"
+                      onClick={() => setShowDone(!showDone)}
+                    >
+                      {showDone ? "🔽" : "▶️"} {STATUS_LABELS[status]} ({filtered.length})
+                    </h3>
+                    {showDone && (
+                      <div className="rounded-lg p-3 space-y-2 bg-green-100 mt-2">
+                        {filtered.map((orderObj) => {
+                          const shortList = menu.flatMap((item) => {
+                            const qty = orderObj.order[item.name] || 0;
+                            return Array(qty).fill(item.short);
+                          });
+                          return (
+                            <div key={orderObj.orderId} className="bg-white rounded-xl border shadow-sm p-3">
+                              <div className="flex justify-between items-center">
+                                <span>
+                                  #{orderObj.orderId}｜${orderObj.total}｜{orderObj.paid ? "✅ 已收款" : "⌛ 未收款"}｜取餐時間：
+                                  {orderObj.pickupTime || "-"}
+                                </span>
+                                <div className="space-x-2 flex items-center">
+                                  <select
+                                    value={orderObj.status}
+                                    onChange={(e) => {
+                                      const newStatus = e.target.value;
+                                      const updatedHistory = orderHistory.map((o) =>
+                                        o.orderId === orderObj.orderId ? { ...o, status: newStatus } : o
+                                      );
+                                      setOrderHistory(updatedHistory);
+                                      const today = selectedDate || getTodayKey();
+                                      const monthly = JSON.parse(localStorage.getItem("orderData") || "{}");
+                                      monthly[today] = updatedHistory;
+                                      localStorage.setItem("orderData", JSON.stringify(monthly));
+                                    }}
+                                    className="border rounded px-1 text-sm"
+                                  >
+                                    {STATUS_OPTIONS.map((s) => (
+                                      <option key={s} value={s}>
+                                        {STATUS_LABELS[s]}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <Button size="sm" onClick={() => handleViewOrder(orderObj.orderId)}>
+                                    查看
+                                  </Button>
+                                  <Button size="sm" variant="destructive" onClick={() => handleCancelOrder(orderObj.orderId)}>
+                                    取消
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="text-sm text-gray-600 mt-1 break-all">
+                                {shortList.join("、")}
+                              </div>
+                              {orderObj.note && (
+                                <div className="text-sm text-pink-600 mt-1">
+                                  📝 備註：{orderObj.note}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // 針對其他狀態 (queue、cooking、ready)
+              const bgColor =
+                status === "queue"
+                  ? "bg-yellow-100"
+                  : status === "cooking"
+                  ? "bg-orange-100"
+                  : status === "ready"
+                  ? "bg-blue-100"
+                  : "bg-green-100";
+              return (
+                <div key={status} className={`mt-4 rounded-lg p-3 space-y-2 ${bgColor}`}>
+                  <h3 className="text-base font-bold">
+                    {STATUS_LABELS[status]} ({filtered.length})
+                  </h3>
+                  {filtered.map((orderObj) => {
+                    const shortList = menu.flatMap((item) => {
+                      const qty = orderObj.order[item.name] || 0;
+                      return Array(qty).fill(item.short);
+                    });
+                    return (
+                      <div key={orderObj.orderId} className="bg-white rounded-xl border shadow-sm p-3">
+                        <div className="flex justify-between items-center">
+                          <span>
+                            #{orderObj.orderId}｜${orderObj.total}｜{orderObj.paid ? "✅ 已收款" : "⌛ 未收款"}｜取餐時間：
+                            {orderObj.pickupTime || "-"}
+                          </span>
+                          <div className="space-x-2 flex items-center">
+                            <select
+                              value={orderObj.status}
+                              onChange={(e) => {
+                                const newStatus = e.target.value;
+                                const updatedHistory = orderHistory.map((o) =>
+                                  o.orderId === orderObj.orderId ? { ...o, status: newStatus } : o
+                                );
+                                setOrderHistory(updatedHistory);
+                                const today = selectedDate || getTodayKey();
+                                const monthly = JSON.parse(localStorage.getItem("orderData") || "{}");
+                                monthly[today] = updatedHistory;
+                                localStorage.setItem("orderData", JSON.stringify(monthly));
+                              }}
+                              className="border rounded px-1 text-sm"
+                            >
+                              {STATUS_OPTIONS.map((s) => (
+                                <option key={s} value={s}>
+                                  {STATUS_LABELS[s]}
+                                </option>
+                              ))}
+                            </select>
+                            <Button size="sm" onClick={() => handleViewOrder(orderObj.orderId)}>
+                              查看
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => handleCancelOrder(orderObj.orderId)}>
+                              取消
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-600 mt-1 break-all">
+                          {shortList.join("、")}
+                        </div>
+                        {orderObj.note && (
+                          <div className="text-sm text-pink-600 mt-1">
+                            📝 備註：{orderObj.note}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+
+            <h3 className="mt-4 font-semibold">🍡 各口味總銷量</h3>
+            <ul className="text-sm space-y-1">
+              {menu.map((item) => (
+                <li key={item.name}>
+                  {item.name}：{totalStats[item.name] || 0} 顆
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 font-bold">💰 營業額：${totalRevenue}</p>
+            
+            {/* 在列表畫面下方加入「新增訂單」按鈕 */}
+            <div className="flex space-x-2 mt-2">
+              <Button variant="outline" onClick={() => setViewingMonthly(true)}>
+                📅 查看本月營業紀錄
+              </Button>
+              <Button
+                onClick={() => {
+                  const nextId = orderHistory.length > 0
+                    ? Math.max(...orderHistory.map((o) => o.orderId)) + 1
+                    : 1;
+                  setOrderId(nextId);
+                  setOrder({});
+                  setPayment(0);
+                  setPickupTime("");
+                  setNote("");
+                  setViewingOrderId(null); // 切換至編輯模式
+                }}
+              >
+                ➕ 新增訂單
+              </Button>
+            </div>
+          </div>
+        );
+      };
+
+      // 主渲染流程，根據 viewingOrderId 決定顯示列表或編輯畫面
+      return (
+        <div className="min-h-screen flex justify-center pt-16 px-4">
+          <div className="w-full max-w-3xl mx-auto space-y-4">
+            <h1 className="text-xl font-bold">🌸 花田舍 點單結帳系統</h1>
+            {viewingMonthly
+              ? renderMonthlyList()
+              : viewingOrderId === "list"
+              ? renderOrderList()
+              : (
+                <>
+                  <p className="text-sm">點單編號：#{orderId}</p>
+                  {menu.map((item) => (
+                    <Card key={item.name} className="flex items-center justify-between p-2">
+                      <CardContent className="flex flex-col w-full">
+                        <div className="flex justify-between items-center w-full">
+                          <span className="text-base">{item.name} - ${item.price}</span>
+                          <div className="flex items-center space-x-2">
+                            <Button onClick={() => setOrder((prev) => ({
+                              ...prev,
+                              [item.name]: Math.max((prev[item.name] || 0) - 1, 0)
+                            }))}>
+                              -
+                            </Button>
+                            <span>{order[item.name] || 0}</span>
+                            <Button onClick={() => setOrder((prev) => ({
+                              ...prev,
+                              [item.name]: (prev[item.name] || 0) + 1
+                            }))}>
+                              +
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  <div className="p-4 bg-gray-100 rounded-xl space-y-2">
+                    <p>
+                      🧾 總金額：${Object.entries(order).reduce((sum, [name, qty]) => {
+                        const item = menu.find((m) => m.name === name);
+                        return sum + qty * item.price;
+                      }, 0)}
+                    </p>
+                    <p>📦 總數量：{Object.values(order).reduce((a, b) => a + b, 0)} 顆</p>
+                    <div className="flex items-center space-x-2">
+                      <label>收款金額：</label>
+                      <Input
+                        type="number"
+                        value={payment}
+                        onChange={(e) => setPayment(Number(e.target.value))}
+                        className="w-24"
+                      />
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <label>取餐時間：</label>
+                      <Input
+                        type="text"
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        placeholder="例：17:30"
+                        className="w-32"
+                      />
+                    </div>
+                    <div className="flex flex-col mt-2">
+                      <label className="text-sm font-medium mb-1">備註：</label>
+                      <textarea
+                        className="border rounded p-2 text-sm"
+                        rows={2}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder="例：不要起司、5點半再拿"
+                      />
+                    </div>
+                    <p>
+                      💵 找零金額：${
+                        (payment - Object.entries(order).reduce((sum, [name, qty]) => {
+                          const item = menu.find((m) => m.name === name);
+                          return sum + qty * item.price;
+                        }, 0)) >= 0
+                          ? (payment - Object.entries(order).reduce((sum, [name, qty]) => {
+                              const item = menu.find((m) => m.name === name);
+                              return sum + qty * item.price;
+                            }, 0)).toFixed(0)
+                          : "金額不足"
+                    }
+                    </p>
+                    <div className="flex space-x-2">
+                      <Button onClick={handleSaveOrder}>💾 儲存訂單</Button>
+                      <Button
+                        onClick={() => {
+                          const nextId = orderHistory.length > 0
+                            ? Math.max(...orderHistory.map((o) => o.orderId)) + 1
+                            : 1;
+                          setOrderId(nextId);
+                          setOrder({});
+                          setPayment(0);
+                          setPickupTime("");
+                          setNote("");
+                        }}
+                      >
+                        ➕ 新增下一筆
+                      </Button>
+                      <Button onClick={() => setViewingOrderId("list")} variant="outline">
+                        📋 查看所有點單
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )
+            }
+          </div>
+        </div>
+      );
+    }
+
+    // 將 OrderSystem 渲染到 #root 元素
+    ReactDOM.render(<OrderSystem />, document.getElementById("root"));
+  </script>
+</body>
+</html>
