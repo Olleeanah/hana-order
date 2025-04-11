@@ -88,6 +88,7 @@
       const [viewingMonthly, setViewingMonthly] = useState(false);
       const [selectedDate, setSelectedDate] = useState(null);
       const [note, setNote] = useState("");
+      const [showStats, setShowStats] = useState(false); // 控制銷量區塊是否展開
 
       // 取得今天的日期字串作為 key (格式如 2025-04-10)
       const getTodayKey = () => {
@@ -196,17 +197,19 @@
                   <span>{date}｜💰${getDailyTotal(data[date])}</span>
                   <div className="space-x-2">
                     <Button size="sm" onClick={() => handleSelectDate(date)}>查看</Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      type="button"
-                      onClick={() => {
+                    <select
+                      className="border rounded px-2 py-1 text-sm"
+                      onChange={(e) => {
+                        const format = e.target.value;
+                        if (!format) return;
+
                         const orders = data[date];
                         if (!orders || orders.length === 0) {
                           alert("這天沒有訂單，無法匯出！");
                           return;
                         }
-                        try {
+
+                        if (format === "json") {
                           const json = JSON.stringify(orders, null, 2);
                           const blob = new Blob([json], { type: "application/json" });
                           const url = URL.createObjectURL(blob);
@@ -217,13 +220,39 @@
                           a.click();
                           document.body.removeChild(a);
                           URL.revokeObjectURL(url);
-                        } catch (e) {
-                          alert("⚠️ 匯出失敗，請確認瀏覽器允許下載。\n錯誤內容：" + e.message);
+                        } else if (format === "csv") {
+                          const header = ["訂單編號", "總金額", "是否付款", "取餐時間", "備註", ...menu.map((m) => m.name)];
+                          const rows = orders.map((o) => {
+                            const items = menu.map((m) => o.order[m.name] || 0);
+                            return [
+                              o.orderId,
+                              o.total,
+                              o.paid ? "是" : "否",
+                              o.pickupTime || "",
+                              `"${(o.note || "").replaceAll('"', '""')}"`,
+                              ...items,
+                            ];
+                          });
+                          const csvContent = [header, ...rows].map(r => r.join(",")).join("\n");
+                          const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `${date}-orders.csv`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
                         }
+
+                        e.target.value = ""; // reset 選單
                       }}
                     >
-                      匯出
-                    </Button>
+                      <option value="">📤 匯出</option>
+                      <option value="json">JSON（備份）</option>
+                      <option value="csv">CSV（對帳）</option>
+                    </select>
+
                     <Button
                       size="sm"
                       variant="destructive"
@@ -244,6 +273,20 @@
                 </li>
               ))}
             </ul>
+
+            {/* 加入本月統計區塊 */}
+            {(() => {
+              const dailyTotals = dates.map((date) => getDailyTotal(data[date]));
+              const totalRevenue = dailyTotals.reduce((sum, v) => sum + v, 0);
+              const averageRevenue = dailyTotals.length > 0 ? (totalRevenue / dailyTotals.length).toFixed(2) : 0;
+              return (
+                <p className="text-sm font-semibold mt-4">
+                  💰 本月營業總額：${totalRevenue}｜📊 平均每日營業額：${averageRevenue}
+                </p>
+              );
+            })()}
+
+
             <Button variant="outline" className="mt-2" onClick={() => setViewingMonthly(false)}>🔙 返回</Button>
           </div>
         );
@@ -259,6 +302,7 @@
             totalStats[name] = (totalStats[name] || 0) + qty;
           });
         });
+        const totalQty = Object.values(totalStats).reduce((a, b) => a + b, 0);
 
         return (
           <div className="p-4 bg-white rounded-xl border space-y-2 relative pb-20">
@@ -414,15 +458,31 @@
               );
             })}
 
-            <h3 className="mt-4 font-semibold">🍡 各口味總銷量</h3>
-            <ul className="text-sm space-y-1">
-              {menu.map((item) => (
-                <li key={item.name}>
-                  {item.name}：{totalStats[item.name] || 0} 顆
-                </li>
-              ))}
-            </ul>
-            <p className="mt-2 font-bold">💰 營業額：${totalRevenue}</p>
+            <div className="mt-4">
+              <h3
+                className="font-semibold bg-yellow-100 px-2 py-1 rounded cursor-pointer inline-block"
+                onClick={() => setShowStats(!showStats)}
+              >
+                {showStats ? "🔽" : "▶️"} 🍡 各口味總銷量（點擊展開）
+              </h3>
+
+              {showStats && (
+                <div className="bg-yellow-50 mt-2 rounded-lg p-3 space-y-1 text-sm">
+                  <ul className="space-y-1">
+                    {menu.map((item) => (
+                      <li key={item.name}>
+                        {item.name}：{totalStats[item.name] || 0} 顆
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 font-semibold">
+                    🍡 總計：{totalQty} 顆
+                  </p>
+                  <p className="mt-1 font-semibold">💰 營業額：${totalRevenue}</p>
+                </div>
+              )}
+            </div>
+
             
             {/* 在列表畫面下方加入「新增訂單」按鈕 */}
             <div className="flex space-x-2 mt-2">
