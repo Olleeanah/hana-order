@@ -63,12 +63,12 @@
       { name: "日式紅豆泥", price: 30, cost: 6.03, short: "紅" },
       { name: "日式紅豆麻糬", price: 35, cost: 8.22, short: "糬" },
       { name: "古早味雞蛋糕", price: 18, cost: 3, short: "古" },
-      { name: "義美草莓果粒", price: 35, cost: 3, short: "莓" },
-      { name: "煉乳草莓果粒", price: 38, cost: 3, short: "乳" },
       { name: "濃情巧克力", price: 38, cost: 3, short: "巧" },
+      { name: "巧克力爆漿麻糬", price: 43, cost: 3, short: "巧糬" },
       { name: "蜂蜜雞蛋糕", price: 28, cost: 3, short: "蜂" },
       { name: "蜂蜜卡士達", price: 30, cost: 3, short: "蜜" },
-      { name: "午後紅茶卡士達", price: 30, cost: 3, short: "午" }, // 👈 只有今天
+      { name: "環保提袋", price: 2, cost: 2, short: "提" },
+    
     ];
 
     // 訂單狀態與標籤
@@ -558,7 +558,11 @@
                         return sum + qty * item.price;
                       }, 0)}
                     </p>
-                    <p>📦 總數量：{Object.values(order).reduce((a, b) => a + b, 0)} 顆</p>
+                    <p>📦 總數量：{Object.entries(order).reduce((sum, [name, qty]) => {
+                      if (name === "環保提袋") return sum; // 不計入
+                      return sum + qty;
+                    }, 0)} 顆</p>
+
                     <div className="flex items-center space-x-2">
                       <label>收款金額：</label>
                       <Input
