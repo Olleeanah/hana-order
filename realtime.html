@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>即時狀態管理</title>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+  <div class="max-w-xl mx-auto bg-white p-6 rounded-2xl shadow-md">
+    <h1 class="text-2xl font-bold mb-4">🍡 花田舍即時狀態管理</h1>
+
+    <!-- 營業狀態切換 -->
+    <div class="flex items-center justify-between mb-6">
+      <span class="text-lg font-medium">營業狀態：</span>
+      <button id="toggleOpen" class="px-4 py-2 rounded bg-green-500 text-white">🔄 載入中...</button>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-2">📦 餐點販售狀態</h2>
+    <ul id="productList" class="space-y-2"></ul>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyBmKN4doiFaXPzzu7tmgLQ9xSXGQNvLaSo",
+      authDomain: "hana-order.firebaseapp.com",
+      databaseURL: "https://hana-order-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "hana-order",
+      storageBucket: "hana-order.appspot.com",
+      messagingSenderId: "40196534715",
+      appId: "1:40196534715:web:97792006a77aebadd6549e"
+    };
+
+    const app = firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const productNames = [
+      "經典蛋燒",
+      "起司蛋燒",
+      "雙重起司",
+      "濃郁卡士達",
+      "法式奶酥",
+      "起司奶酥",
+      "黑糖麻糬",
+      "日式紅豆泥",
+      "日式紅豆麻糬",
+      "古早味雞蛋糕(原味)"
+    ];
+
+    const productList = document.getElementById("productList");
+    const toggleOpen = document.getElementById("toggleOpen");
+
+    // 初始化狀態
+    let open = true;
+    const soldout = {};
+
+    function renderStatus() {
+      toggleOpen.textContent = open ? "🟢 營業中（點擊切換）" : "🔴 今日休息（點擊切換）";
+      toggleOpen.className = open ? "px-4 py-2 rounded bg-green-500 text-white" : "px-4 py-2 rounded bg-red-500 text-white";
+    }
+
+    function renderProducts() {
+      productList.innerHTML = "";
+      productNames.forEach(name => {
+        const isSoldOut = soldout[name];
+        const li = document.createElement("li");
+        li.className = "flex justify-between items-center bg-gray-100 px-4 py-2 rounded";
+        li.innerHTML = `
+          <span>${name}</span>
+          <button class="px-3 py-1 text-white rounded ${isSoldOut ? 'bg-red-500' : 'bg-green-500'}" data-name="${name}">
+            ${isSoldOut ? '❌ 售完' : '✅ 販售中'}
+          </button>
+        `;
+        productList.appendChild(li);
+      });
+    }
+
+    // 讀取狀態
+    db.ref("status/open").on("value", snapshot => {
+      open = snapshot.val();
+      renderStatus();
+    });
+
+    db.ref("soldout").on("value", snapshot => {
+      const data = snapshot.val() || {};
+      productNames.forEach(name => soldout[name] = !!data[name]);
+      renderProducts();
+    });
+
+    // 點擊切換營業
+    toggleOpen.addEventListener("click", () => {
+      db.ref("status/open").set(!open);
+    });
+
+    // 點擊售完 / 販售中
+    productList.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-name]");
+      if (btn) {
+        const name = btn.dataset.name;
+        const current = soldout[name];
+        db.ref("soldout/" + name).set(!current);
+      }
+    });
+  </script>
+</body>
+</html>
