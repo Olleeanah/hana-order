@@ -4,25 +4,39 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>即時狀態管理</title>
+
+  <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+
+  <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-50 min-h-screen p-6">
   <div class="max-w-xl mx-auto bg-white p-6 rounded-2xl shadow-md">
     <h1 class="text-2xl font-bold mb-4">🍡 花田舍即時狀態管理</h1>
 
-    <!-- 營業狀態切換 -->
     <div class="flex items-center justify-between mb-6">
       <span class="text-lg font-medium">營業狀態：</span>
-      <button id="toggleOpen" class="px-4 py-2 rounded bg-green-500 text-white">🔄 載入中...</button>
+      <span id="openStatus" class="text-green-600 font-semibold">載入中...</span>
     </div>
 
     <h2 class="text-xl font-semibold mb-2">📦 餐點販售狀態</h2>
-    <ul id="productList" class="space-y-2"></ul>
+    <ul id="productList" class="space-y-2 text-lg">
+      <!-- 餐點狀態會自動插入 -->
+    </ul>
+
+    <!-- 🔙 返回主頁按鈕 -->
+        <div class="mt-8 text-center">
+        <a href="index.html" class="inline-block bg-blue-500 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-600 transition">
+            🔙 返回主頁
+        </a>
+        </div>
+
   </div>
 
   <script>
+    // ✅ Firebase 設定
     const firebaseConfig = {
       apiKey: "AIzaSyBmKN4doiFaXPzzu7tmgLQ9xSXGQNvLaSo",
       authDomain: "hana-order.firebaseapp.com",
@@ -33,75 +47,47 @@
       appId: "1:40196534715:web:97792006a77aebadd6549e"
     };
 
+    // ✅ 初始化 Firebase
     const app = firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
+    // ✅ 餐點名稱陣列（必須與 Firebase 資料庫 key 完全一致）
     const productNames = [
-      "經典蛋燒",
-      "起司蛋燒",
-      "雙重起司",
-      "濃郁卡士達",
-      "法式奶酥",
-      "起司奶酥",
-      "黑糖麻糬",
-      "日式紅豆泥",
+      "古早味雞蛋糕(原味)",
+      "日式紅豆派",
       "日式紅豆麻糬",
-      "古早味雞蛋糕(原味)"
+      "法式奶凍",
+      "濃味卡士達",
+      "經典菜塊",
+      "起司奶凍",
+      "起司菜塊",
+      "雙起司奶凍",
+      "雙起司菜塊",
+      "黑糖麻糬"
     ];
 
+    // ✅ 更新營業狀態
+    const openStatusEl = document.getElementById("openStatus");
+    firebase.database().ref("status/open").on("value", (snapshot) => {
+      const open = snapshot.val();
+      openStatusEl.textContent = open ? "營業中" : "休息中";
+      openStatusEl.className = open ? "text-green-600 font-semibold" : "text-red-600 font-semibold";
+    });
+
+    // ✅ 更新每個餐點販售狀態
     const productList = document.getElementById("productList");
-    const toggleOpen = document.getElementById("toggleOpen");
 
-    // 初始化狀態
-    let open = true;
-    const soldout = {};
+    productNames.forEach(name => {
+      const li = document.createElement("li");
+      li.textContent = `${name}：載入中...`;
+      li.id = `product-${name}`;
+      productList.appendChild(li);
 
-    function renderStatus() {
-      toggleOpen.textContent = open ? "🟢 營業中（點擊切換）" : "🔴 今日休息（點擊切換）";
-      toggleOpen.className = open ? "px-4 py-2 rounded bg-green-500 text-white" : "px-4 py-2 rounded bg-red-500 text-white";
-    }
-
-    function renderProducts() {
-      productList.innerHTML = "";
-      productNames.forEach(name => {
-        const isSoldOut = soldout[name];
-        const li = document.createElement("li");
-        li.className = "flex justify-between items-center bg-gray-100 px-4 py-2 rounded";
-        li.innerHTML = `
-          <span>${name}</span>
-          <button class="px-3 py-1 text-white rounded ${isSoldOut ? 'bg-red-500' : 'bg-green-500'}" data-name="${name}">
-            ${isSoldOut ? '❌ 售完' : '✅ 販售中'}
-          </button>
-        `;
-        productList.appendChild(li);
+      firebase.database().ref(`soldout/${name}`).on("value", (snapshot) => {
+        const soldout = snapshot.val();
+        li.textContent = `${name}：${soldout ? "❌ 售完" : "✅ 販售中"}`;
+        li.className = soldout ? "text-red-500" : "text-green-700";
       });
-    }
-
-    // 讀取狀態
-    db.ref("status/open").on("value", snapshot => {
-      open = snapshot.val();
-      renderStatus();
-    });
-
-    db.ref("soldout").on("value", snapshot => {
-      const data = snapshot.val() || {};
-      productNames.forEach(name => soldout[name] = !!data[name]);
-      renderProducts();
-    });
-
-    // 點擊切換營業
-    toggleOpen.addEventListener("click", () => {
-      db.ref("status/open").set(!open);
-    });
-
-    // 點擊售完 / 販售中
-    productList.addEventListener("click", (e) => {
-      const btn = e.target.closest("button[data-name]");
-      if (btn) {
-        const name = btn.dataset.name;
-        const current = soldout[name];
-        db.ref("soldout/" + name).set(!current);
-      }
     });
   </script>
 </body>
