@@ -3,91 +3,131 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>即時狀態管理</title>
-
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js"></script>
+  <title>花田舍 即時狀態控制面板</title>
 
   <!-- Tailwind CSS -->
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-50 min-h-screen p-6">
-  <div class="max-w-xl mx-auto bg-white p-6 rounded-2xl shadow-md">
-    <h1 class="text-2xl font-bold mb-4">🍡 花田舍即時狀態管理</h1>
+  <div class="max-w-2xl mx-auto bg-white p-6 rounded-xl shadow">
+    <h1 class="text-2xl font-bold mb-4 text-center">🍡 花田舍 狀態控制面板</h1>
 
-    <div class="flex items-center justify-between mb-6">
-      <span class="text-lg font-medium">營業狀態：</span>
-      <span id="openStatus" class="text-green-600 font-semibold">載入中...</span>
+    <!-- 營業狀態控制 -->
+    <div class="mb-6">
+      <h2 class="text-xl font-semibold mb-2">營業狀態</h2>
+      <div class="flex items-center gap-4">
+        <span id="openStatus" class="text-gray-700">讀取中...</span>
+        <button id="toggleOpen" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition">
+          切換營業狀態
+        </button>
+      </div>
     </div>
 
-    <h2 class="text-xl font-semibold mb-2">📦 餐點販售狀態</h2>
-    <ul id="productList" class="space-y-2 text-lg">
-      <!-- 餐點狀態會自動插入 -->
-    </ul>
+    <!-- 商品狀態控制 -->
+    <div class="mb-6">
+      <h2 class="text-xl font-semibold mb-2">商品售完狀態</h2>
+      <form id="productForm" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <!-- JS 動態產生品項 -->
+      </form>
+      <button id="saveBtn" class="mt-4 bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 transition">
+        儲存商品狀態
+      </button>
+    </div>
 
-    <!-- 🔙 返回主頁按鈕 -->
-        <div class="mt-8 text-center">
-        <a href="index.html" class="inline-block bg-blue-500 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-600 transition">
-            🔙 返回主頁
-        </a>
-        </div>
-
+    <!-- 返回首頁 -->
+    <div class="mt-8 text-center">
+      <a href="index.html" class="text-blue-600 hover:underline">← 返回主頁</a>
+    </div>
   </div>
 
-  <script>
-    // ✅ Firebase 設定
+  <!-- Firebase -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js";
+    import { getDatabase, ref, onValue, set, update, get } from "https://www.gstatic.com/firebasejs/9.6.1/firebase-database.js";
+
     const firebaseConfig = {
-      apiKey: "AIzaSyBmKN4doiFaXPzzu7tmgLQ9xSXGQNvLaSo",
+      apiKey: "AIzaSyBmKN4doiFaXPzzu7tmgLQ99xSXGQNvLaSo",
       authDomain: "hana-order.firebaseapp.com",
       databaseURL: "https://hana-order-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "hana-order",
       storageBucket: "hana-order.appspot.com",
-      messagingSenderId: "40196534715",
-      appId: "1:40196534715:web:97792006a77aebadd6549e"
+      messagingSenderId: "198026684592",
+      appId: "1:198026684592:web:6a34cb6f2d35a2eec4b6e4"
     };
 
-    // ✅ 初始化 Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-    // ✅ 餐點名稱陣列（必須與 Firebase 資料庫 key 完全一致）
-    const productNames = [
-      "古早味雞蛋糕(原味)",
-      "日式紅豆派",
+    // 品項清單
+    const items = [
+      "經典蛋燒",
+      "起司蛋燒",
+      "雙重起司",
+      "濃郁卡士達",
+      "法式奶酥",
+      "起司奶酥",
+      "黑糖麻糬",
+      "日式紅豆泥",
       "日式紅豆麻糬",
-      "法式奶凍",
-      "濃味卡士達",
-      "經典菜塊",
-      "起司奶凍",
-      "起司菜塊",
-      "雙起司奶凍",
-      "雙起司菜塊",
-      "黑糖麻糬"
+      "古早味雞蛋糕"
+    
+      
     ];
 
-    // ✅ 更新營業狀態
+    // --------- 營業狀態控制邏輯 ---------
     const openStatusEl = document.getElementById("openStatus");
-    firebase.database().ref("status/open").on("value", (snapshot) => {
-      const open = snapshot.val();
-      openStatusEl.textContent = open ? "營業中" : "休息中";
-      openStatusEl.className = open ? "text-green-600 font-semibold" : "text-red-600 font-semibold";
+    const toggleOpenBtn = document.getElementById("toggleOpen");
+
+    const statusRef = ref(db, "status/open");
+    onValue(statusRef, (snapshot) => {
+      const isOpen = snapshot.val();
+      openStatusEl.textContent = isOpen ? "✅ 營業中" : "❌ 已打烊";
+      openStatusEl.className = isOpen ? "text-green-600" : "text-red-600";
     });
 
-    // ✅ 更新每個餐點販售狀態
-    const productList = document.getElementById("productList");
+    toggleOpenBtn.addEventListener("click", async () => {
+      const current = (await get(statusRef)).val();
+      await set(statusRef, !current);
+    });
 
-    productNames.forEach(name => {
-      const li = document.createElement("li");
-      li.textContent = `${name}：載入中...`;
-      li.id = `product-${name}`;
-      productList.appendChild(li);
+    // --------- 商品狀態控制邏輯 ---------
+    const form = document.getElementById("productForm");
+    const saveBtn = document.getElementById("saveBtn");
 
-      firebase.database().ref(`soldout/${name}`).on("value", (snapshot) => {
-        const soldout = snapshot.val();
-        li.textContent = `${name}：${soldout ? "❌ 售完" : "✅ 販售中"}`;
-        li.className = soldout ? "text-red-500" : "text-green-700";
+    // 動態產生 checkbox 並同步讀取狀態
+    items.forEach(item => {
+      const label = document.createElement("label");
+      label.className = "flex items-center gap-2";
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.id = `item-${item}`;
+      checkbox.dataset.name = item;
+
+      const span = document.createElement("span");
+      span.textContent = item;
+
+      label.appendChild(checkbox);
+      label.appendChild(span);
+      form.appendChild(label);
+
+      // Firebase 中讀取目前售完狀態
+      const itemRef = ref(db, `soldout/${item}`);
+      onValue(itemRef, (snapshot) => {
+        checkbox.checked = snapshot.val() === true;
       });
+    });
+
+    // 儲存按鈕 → 將所有 checkbox 狀態寫入 Firebase
+    saveBtn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const updates = {};
+      items.forEach(item => {
+        const checked = document.querySelector(`#item-${CSS.escape(item)}`).checked;
+        updates[`soldout/${item}`] = checked;
+      });
+      await update(ref(db), updates);
+      alert("✅ 商品狀態已更新！");
     });
   </script>
 </body>
