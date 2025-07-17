@@ -96,7 +96,7 @@
       // 預設狀態為「列表」模式，可從此畫面新增訂單
       const [viewingOrderId, setViewingOrderId] = useState("list");
       const [showDone, setShowDone] = useState(false);
-      const [viewingMonthly, setViewingMonthly] = useState(false);
+      const [viewingMonthly, setViewingMonthly] = useState(false);"list"
       const [selectedDate, setSelectedDate] = useState(null);
       const [note, setNote] = useState("");
       const [showStats, setShowStats] = useState(false); // 控制銷量區塊是否展開
@@ -565,6 +565,21 @@
                     </Card>
                   ))}
                   <div className="p-4 bg-gray-100 rounded-xl space-y-2">
+
+                    <p className="text-lg font-bold text-pink-700 bg-pink-100 px-3 py-2 rounded shadow-sm break-all">
+                      📝 烘製順序：
+                      {menu
+                        .map((item) => {
+                          const qty = order[item.name] || 0;
+                          return qty > 0 ? `${item.short}x${qty}` : null;
+                        })
+                        .filter(Boolean)
+                        .join("、")}
+                    </p>
+
+
+
+
                     <p>
                       🧾 總金額：${Object.entries(order).reduce((sum, [name, qty]) => {
                         const item = menu.find((m) => m.name === name);
