@@ -363,10 +363,17 @@
                     {showDone && (
                       <div className="rounded-lg p-3 space-y-2 bg-green-100 mt-2">
                         {filtered.map((orderObj) => {
-                          const shortList = menu.flatMap((item) => {
+                          const shortCount = {};
+                          menu.forEach((item) => {
                             const qty = orderObj.order[item.name] || 0;
-                            return Array(qty).fill(item.short);
+                            if (qty > 0) {
+                              shortCount[item.short] = (shortCount[item.short] || 0) + qty;
+                            }
                           });
+                          const shortList = Object.entries(shortCount)
+                            .map(([short, qty]) => `${short}${qty > 1 ? "*" + qty : ""}`)
+                            .join("、");
+
                           return (
                             <div key={orderObj.orderId} className="bg-white rounded-xl border shadow-sm p-3">
                               <div className="flex justify-between items-center">
@@ -436,10 +443,17 @@
                     {STATUS_LABELS[status]} ({filtered.length})
                   </h3>
                   {filtered.map((orderObj) => {
-                    const shortList = menu.flatMap((item) => {
+                    const shortCount = {};
+                    menu.forEach((item) => {
                       const qty = orderObj.order[item.name] || 0;
-                      return Array(qty).fill(item.short);
+                      if (qty > 0) {
+                        shortCount[item.short] = (shortCount[item.short] || 0) + qty;
+                      }
                     });
+                    const shortList = Object.entries(shortCount)
+                      .map(([short, qty]) => `${short}${qty > 1 ? "*" + qty : ""}`)
+                      .join("、");
+
                     return (
                       <div key={orderObj.orderId} className="bg-white rounded-xl border shadow-sm p-3">
                         <div className="flex justify-between items-center">
@@ -478,7 +492,7 @@
                           </div>
                         </div>
                         <div className="text-sm text-gray-600 mt-1 break-all">
-                          {shortList.join("、")}
+                          {shortList}
                         </div>
                         {orderObj.note && (
                           <div className="text-sm text-pink-600 mt-1">
@@ -569,24 +583,48 @@
                         <div className="flex justify-between items-center w-full">
                           <span className="text-base">{item.name} - ${item.price}</span>
                           <div className="flex items-center space-x-2">
-                            <Button onClick={() => setOrder((prev) => ({
-                              ...prev,
-                              [item.name]: Math.max((prev[item.name] || 0) - 1, 0)
-                            }))}>
+                            <Button
+                              onClick={() =>
+                                setOrder((prev) => ({
+                                  ...prev,
+                                  [item.name]: Math.max((prev[item.name] || 0) - 1, 0),
+                                }))
+                              }
+                            >
                               -
                             </Button>
-                            <span>{order[item.name] || 0}</span>
-                            <Button onClick={() => setOrder((prev) => ({
-                              ...prev,
-                              [item.name]: (prev[item.name] || 0) + 1
-                            }))}>
+
+                            <input
+                              type="number"
+                              value={order[item.name] || 0}
+                              min="0"
+                              className="w-16 text-center border rounded px-1 py-0.5"
+                              onChange={(e) => {
+                                const value = Math.max(0, parseInt(e.target.value) || 0);
+                                setOrder((prev) => ({
+                                  ...prev,
+                                  [item.name]: value,
+                                }));
+                              }}
+                            />
+
+                            <Button
+                              onClick={() =>
+                                setOrder((prev) => ({
+                                  ...prev,
+                                  [item.name]: (prev[item.name] || 0) + 1,
+                                }))
+                              }
+                            >
                               +
                             </Button>
                           </div>
+
                         </div>
                       </CardContent>
                     </Card>
                   ))}
+                  
                   <div className="p-4 bg-gray-100 rounded-xl space-y-2">
 
                     <p className="text-lg font-bold text-pink-700 bg-pink-100 px-3 py-2 rounded shadow-sm break-all">
